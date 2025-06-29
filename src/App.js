@@ -33,7 +33,7 @@ const MobileDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Cargar todos los datos
+  // Cargar todos los datos - FUNCIÓN ARREGLADA
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -45,13 +45,37 @@ const MobileDashboard = () => {
         fetch(`${API_BASE_URL}/faq_vista?limit=20`)
       ]);
       
-      const [conversaciones, contactos, propuestas, participantes, faq] = await Promise.all([
-        conversacionesRes.json(),
-        contactosRes.json(),
-        propuestasRes.json(),
-        participantesRes.json(),
-        faqRes.json()
-      ]);
+      let conversaciones = [];
+      let contactos = [];
+      let propuestas = [];
+      let participantes = [];
+      let faq = [];
+
+      // Procesar cada respuesta con protección contra errores
+      if (conversacionesRes.ok) {
+        conversaciones = await conversacionesRes.json();
+        if (!Array.isArray(conversaciones)) conversaciones = [];
+      }
+      
+      if (contactosRes.ok) {
+        contactos = await contactosRes.json();
+        if (!Array.isArray(contactos)) contactos = [];
+      }
+      
+      if (propuestasRes.ok) {
+        propuestas = await propuestasRes.json();
+        if (!Array.isArray(propuestas)) propuestas = [];
+      }
+      
+      if (participantesRes.ok) {
+        participantes = await participantesRes.json();
+        if (!Array.isArray(participantes)) participantes = [];
+      }
+      
+      if (faqRes.ok) {
+        faq = await faqRes.json();
+        if (!Array.isArray(faq)) faq = [];
+      }
 
       // Calcular estadísticas básicas
       const estadisticas = {
@@ -68,6 +92,15 @@ const MobileDashboard = () => {
       setData({ conversaciones, contactos, propuestas, participantes, faq, estadisticas });
     } catch (error) {
       console.error('Error fetching data:', error);
+      // En caso de error, mantener arrays vacíos
+      setData({
+        conversaciones: [],
+        contactos: [],
+        propuestas: [],
+        participantes: [],
+        faq: [],
+        estadisticas: {}
+      });
     } finally {
       setLoading(false);
     }
