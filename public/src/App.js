@@ -1,5 +1,5 @@
 // ⚠️ CAMBIAR ESTA URL POR LA TUYA DE POSTGREST
-const API_BASE_URL = 'https://TU-POSTGREST-URL.up.railway.app';
+const API_BASE_URL = 'https://postgrest-api-production-7372.up.railway.app/';
 
 import React, { useState, useEffect } from 'react';
 import { Search, MessageSquare, Users, FileText, HelpCircle, Award, RefreshCw, Calendar, Mail, Phone, MapPin, User, MessageCircle, TrendingUp, Eye } from 'lucide-react';
