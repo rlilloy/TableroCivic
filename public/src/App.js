@@ -1,8 +1,24 @@
 // ⚠️ CAMBIAR ESTA URL POR LA TUYA DE POSTGREST
-const API_BASE_URL = 'https://postgrest-api-production-7372.up.railway.app/';
+const API_BASE_URL = 'https://postgrest-api-production-7372.up.railway.app';
 
 import React, { useState, useEffect } from 'react';
-import { Search, MessageSquare, Users, FileText, HelpCircle, Award, RefreshCw, Calendar, Mail, Phone, MapPin, User, MessageCircle, TrendingUp, Eye } from 'lucide-react';
+
+// Iconos simples con emojis - sin dependencias
+const Search = ({ className }) => <span className={className}>🔍</span>;
+const MessageSquare = ({ className }) => <span className={className}>💬</span>;
+const Users = ({ className }) => <span className={className}>👥</span>;
+const FileText = ({ className }) => <span className={className}>📄</span>;
+const HelpCircle = ({ className }) => <span className={className}>❓</span>;
+const Award = ({ className }) => <span className={className}>🏆</span>;
+const RefreshCw = ({ className }) => <span className={className}>🔄</span>;
+const Calendar = ({ className }) => <span className={className}>📅</span>;
+const Mail = ({ className }) => <span className={className}>📧</span>;
+const Phone = ({ className }) => <span className={className}>📞</span>;
+const MapPin = ({ className }) => <span className={className}>📍</span>;
+const User = ({ className }) => <span className={className}>👤</span>;
+const MessageCircle = ({ className }) => <span className={className}>💭</span>;
+const TrendingUp = ({ className }) => <span className={className}>📈</span>;
+const Eye = ({ className }) => <span className={className}>👁️</span>;
 
 const MobileDashboard = () => {
   const [activeTab, setActiveTab] = useState('conversaciones');
@@ -485,4 +501,4 @@ const MobileDashboard = () => {
   );
 };
 
-export default MobileDashboard; 
+export default MobileDashboard;
