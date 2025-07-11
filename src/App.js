@@ -19,6 +19,10 @@ const User = ({ className }) => <span className={className}>👤</span>;
 const MessageCircle = ({ className }) => <span className={className}>💭</span>;
 const TrendingUp = ({ className }) => <span className={className}>📈</span>;
 const Eye = ({ className }) => <span className={className}>👁️</span>;
+const UserCheck = ({ className }) => <span className={className}>✅</span>;
+const Edit = ({ className }) => <span className={className}>✏️</span>;
+const X = ({ className }) => <span className={className}>❌</span>;
+const Save = ({ className }) => <span className={className}>💾</span>;
 
 const MobileDashboard = () => {
   const [activeTab, setActiveTab] = useState('conversaciones');
@@ -28,21 +32,32 @@ const MobileDashboard = () => {
     propuestas: [],
     participantes: [],
     faq: [],
+    interesados: [],
     estadisticas: {}
   });
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Estados para el modal de intervención
+  const [showModal, setShowModal] = useState(false);
+  const [selectedInteresado, setSelectedInteresado] = useState(null);
+  const [intervencionForm, setIntervencionForm] = useState({
+    respuesta_seguimiento: '',
+    nuevo_estado: 'confirmado'
+  });
+  const [savingIntervention, setSavingIntervention] = useState(false);
 
-  // Cargar todos los datos - FUNCIÓN ARREGLADA
+  // Cargar todos los datos - FUNCIÓN ACTUALIZADA
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [conversacionesRes, contactosRes, propuestasRes, participantesRes, faqRes] = await Promise.all([
+      const [conversacionesRes, contactosRes, propuestasRes, participantesRes, faqRes, interesadosRes] = await Promise.all([
         fetch(`${API_BASE_URL}/conversaciones_vista?limit=50`),
         fetch(`${API_BASE_URL}/contactos_vista?limit=100`),
         fetch(`${API_BASE_URL}/propuestas_vista?limit=50`),
         fetch(`${API_BASE_URL}/participantes_vista?limit=50`),
-        fetch(`${API_BASE_URL}/faq_vista?limit=20`)
+        fetch(`${API_BASE_URL}/faq_vista?limit=20`),
+        fetch(`${API_BASE_URL}/participantes_vista?estado=eq.interesado&limit=100`)
       ]);
       
       let conversaciones = [];
@@ -50,6 +65,7 @@ const MobileDashboard = () => {
       let propuestas = [];
       let participantes = [];
       let faq = [];
+      let interesados = [];
 
       // Procesar cada respuesta con protección contra errores
       if (conversacionesRes.ok) {
@@ -77,6 +93,11 @@ const MobileDashboard = () => {
         if (!Array.isArray(faq)) faq = [];
       }
 
+      if (interesadosRes.ok) {
+        interesados = await interesadosRes.json();
+        if (!Array.isArray(interesados)) interesados = [];
+      }
+
       // Calcular estadísticas básicas
       const estadisticas = {
         total_contactos: contactos.length,
@@ -86,10 +107,11 @@ const MobileDashboard = () => {
         propuestas_pendientes: propuestas.filter(p => 
           new Date(p.fecha_creacion) >= new Date(Date.now() - 7*24*60*60*1000)
         ).length,
-        participantes_activos: participantes.filter(p => p.estado === 'activo').length
+        participantes_activos: participantes.filter(p => p.estado === 'activo').length,
+        interesados_pendientes: interesados.length
       };
       
-      setData({ conversaciones, contactos, propuestas, participantes, faq, estadisticas });
+      setData({ conversaciones, contactos, propuestas, participantes, faq, interesados, estadisticas });
     } catch (error) {
       console.error('Error fetching data:', error);
       // En caso de error, mantener arrays vacíos
@@ -99,10 +121,55 @@ const MobileDashboard = () => {
         propuestas: [],
         participantes: [],
         faq: [],
+        interesados: [],
         estadisticas: {}
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Función para guardar intervención
+  const saveIntervention = async () => {
+    if (!selectedInteresado || !intervencionForm.respuesta_seguimiento.trim()) {
+      alert('Por favor completa la intervención');
+      return;
+    }
+
+    setSavingIntervention(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/participantes_fundacion?id=eq.${selectedInteresado.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({
+          respuesta_seguimiento: intervencionForm.respuesta_seguimiento,
+          estado: intervencionForm.nuevo_estado,
+          seguimiento_por_id: 1, // Temporal hasta implementar sistema de usuarios
+          fecha_seguimiento: new Date().toISOString()
+        })
+      });
+
+      if (response.ok) {
+        alert('Intervención registrada exitosamente');
+        setShowModal(false);
+        setSelectedInteresado(null);
+        setIntervencionForm({
+          respuesta_seguimiento: '',
+          nuevo_estado: 'confirmado'
+        });
+        // Recargar datos para actualizar la lista
+        fetchData();
+      } else {
+        throw new Error('Error al guardar la intervención');
+      }
+    } catch (error) {
+      console.error('Error saving intervention:', error);
+      alert('Error al guardar la intervención. Intenta nuevamente.');
+    } finally {
+      setSavingIntervention(false);
     }
   };
 
@@ -160,6 +227,180 @@ const MobileDashboard = () => {
       </div>
     </div>
   );
+
+  // NUEVO: Componente para interesados
+  const InteresadoCard = ({ item }) => (
+    <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200 mb-3">
+      <div className="flex justify-between items-start mb-3">
+        <h4 className="font-semibold text-gray-800 text-base">{item.contacto_nombre}</h4>
+        <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+          INTERESADO
+        </span>
+      </div>
+      
+      <div className="space-y-2 mb-3">
+        {item.email && (
+          <p className="flex items-center text-sm text-gray-600">
+            <Mail className="w-4 h-4 mr-2 text-gray-400" />
+            {item.email}
+          </p>
+        )}
+        {item.telefono && (
+          <p className="flex items-center text-sm text-gray-600">
+            <Phone className="w-4 h-4 mr-2 text-gray-400" />
+            {item.telefono}
+          </p>
+        )}
+        {item.domicilio && (
+          <p className="flex items-center text-sm text-gray-600">
+            <MapPin className="w-4 h-4 mr-2 text-gray-400" />
+            {item.domicilio}
+          </p>
+        )}
+      </div>
+      
+      <div className="flex justify-between items-center mb-3">
+        <div className="text-xs text-gray-500">
+          <p className="flex items-center">
+            <Calendar className="w-3 h-3 mr-1" />
+            Registro: {formatDate(item.fecha_registro)}
+          </p>
+          {item.origen && (
+            <p className="mt-1">
+              <span className="font-medium">Origen:</span> {item.origen}
+            </p>
+          )}
+        </div>
+      </div>
+      
+      {item.notas && (
+        <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+          <p className="text-xs text-gray-700">
+            <span className="font-medium">Notas:</span> {item.notas}
+          </p>
+        </div>
+      )}
+      
+      <button
+        onClick={() => {
+          setSelectedInteresado(item);
+          setShowModal(true);
+        }}
+        className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center justify-center"
+      >
+        <Edit className="w-4 h-4 mr-2" />
+        Registrar Intervención
+      </button>
+    </div>
+  );
+
+  // Modal de intervención
+  const InterventionModal = () => {
+    if (!showModal || !selectedInteresado) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+          <div className="p-4 border-b border-gray-200">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold text-gray-800">
+                Registrar Intervención
+              </h3>
+              <button
+                onClick={() => {
+                  setShowModal(false);
+                  setSelectedInteresado(null);
+                  setIntervencionForm({
+                    respuesta_seguimiento: '',
+                    nuevo_estado: 'confirmado'
+                  });
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+          </div>
+          
+          <div className="p-4">
+            <div className="mb-4">
+              <h4 className="font-medium text-gray-700 mb-2">
+                {selectedInteresado.contacto_nombre}
+              </h4>
+              <p className="text-sm text-gray-600">{selectedInteresado.email}</p>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Intervención realizada: *
+              </label>
+              <textarea
+                value={intervencionForm.respuesta_seguimiento}
+                onChange={(e) => setIntervencionForm({
+                  ...intervencionForm,
+                  respuesta_seguimiento: e.target.value
+                })}
+                placeholder="Describe la intervención realizada (máximo ~50 palabras)..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                rows="4"
+                maxLength="300"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                {intervencionForm.respuesta_seguimiento.length}/300 caracteres
+              </p>
+            </div>
+            
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Nuevo estado: *
+              </label>
+              <select
+                value={intervencionForm.nuevo_estado}
+                onChange={(e) => setIntervencionForm({
+                  ...intervencionForm,
+                  nuevo_estado: e.target.value
+                })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              >
+                <option value="confirmado">Confirmado</option>
+                <option value="pendiente">Pendiente</option>
+                <option value="rechazo">Rechazo</option>
+              </select>
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowModal(false);
+                  setSelectedInteresado(null);
+                  setIntervencionForm({
+                    respuesta_seguimiento: '',
+                    nuevo_estado: 'confirmado'
+                  });
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                disabled={savingIntervention}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={saveIntervention}
+                disabled={savingIntervention || !intervencionForm.respuesta_seguimiento.trim()}
+                className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+              >
+                {savingIntervention ? (
+                  <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Save className="w-4 h-4 mr-2" />
+                )}
+                {savingIntervention ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const ConversacionCard = ({ item }) => (
     <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200 mb-3">
@@ -418,7 +659,8 @@ const MobileDashboard = () => {
     contactos: filterData(data.contactos, ['nombre_completo', 'email', 'telefono', 'domicilio']),
     propuestas: filterData(data.propuestas, ['propuesta', 'contacto_nombre', 'categoria']),
     participantes: filterData(data.participantes, ['contacto_nombre', 'estado', 'email']),
-    faq: filterData(data.faq, ['pregunta', 'respuesta', 'categoria_nombre', 'tags'])
+    faq: filterData(data.faq, ['pregunta', 'respuesta', 'categoria_nombre', 'tags']),
+    interesados: filterData(data.interesados, ['contacto_nombre', 'email', 'telefono', 'origen'])
   };
 
   const tabs = [
@@ -426,6 +668,7 @@ const MobileDashboard = () => {
     { key: 'contactos', label: 'Contactos', icon: Users, count: data.contactos.length },
     { key: 'propuestas', label: 'Propuestas', icon: FileText, count: data.propuestas.length },
     { key: 'participantes', label: 'Fundación', icon: Award, count: data.participantes.length },
+    { key: 'interesados', label: 'Interesados', icon: UserCheck, count: data.interesados.length },
     { key: 'faq', label: 'FAQ', icon: HelpCircle, count: data.faq.length }
   ];
 
@@ -451,7 +694,7 @@ const MobileDashboard = () => {
           <StatsCard icon={Users} title="Contactos" value={data.estadisticas.total_contactos || 0} color="blue" />
           <StatsCard icon={MessageCircle} title="Conv. Hoy" value={data.estadisticas.conversaciones_hoy || 0} color="green" />
           <StatsCard icon={FileText} title="Propuestas" value={data.estadisticas.propuestas_pendientes || 0} color="orange" />
-          <StatsCard icon={Award} title="Participantes" value={data.estadisticas.participantes_activos || 0} color="purple" />
+          <StatsCard icon={UserCheck} title="Interesados" value={data.estadisticas.interesados_pendientes || 0} color="purple" />
         </div>
       </div>
 
@@ -514,6 +757,9 @@ const MobileDashboard = () => {
             {activeTab === 'participantes' && currentData.participantes.map(item => (
               <ParticipanteCard key={item.id} item={item} />
             ))}
+            {activeTab === 'interesados' && currentData.interesados.map(item => (
+              <InteresadoCard key={item.id} item={item} />
+            ))}
             {activeTab === 'faq' && currentData.faq.map(item => (
               <FaqCard key={item.id} item={item} />
             ))}
@@ -530,6 +776,9 @@ const MobileDashboard = () => {
           </>
         )}
       </div>
+
+      {/* Modal de intervención */}
+      <InterventionModal />
     </div>
   );
 };
