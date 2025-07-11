@@ -331,10 +331,12 @@ const MobileDashboard = () => {
             </div>
             
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="intervencion-textarea" className="block text-sm font-medium text-gray-700 mb-2">
                 Intervención realizada: *
               </label>
               <textarea
+                id="intervencion-textarea"
+                name="intervencion"
                 value={intervencionForm.respuesta_seguimiento}
                 onChange={(e) => setIntervencionForm({
                   ...intervencionForm,
@@ -351,10 +353,12 @@ const MobileDashboard = () => {
             </div>
             
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="nuevo-estado-select" className="block text-sm font-medium text-gray-700 mb-2">
                 Nuevo estado: *
               </label>
               <select
+                id="nuevo-estado-select"
+                name="nuevoEstado"
                 value={intervencionForm.nuevo_estado}
                 onChange={(e) => setIntervencionForm({
                   ...intervencionForm,
@@ -704,6 +708,8 @@ const MobileDashboard = () => {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
           <input
             type="text"
+            id="search-input"
+            name="search"
             placeholder="Buscar en todas las secciones..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
