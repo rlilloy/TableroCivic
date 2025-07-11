@@ -664,12 +664,12 @@ const MobileDashboard = () => {
   };
 
   const tabs = [
-    { key: 'conversaciones', label: 'Conversaciones', icon: MessageSquare, count: data.conversaciones.length },
-    { key: 'contactos', label: 'Contactos', icon: Users, count: data.contactos.length },
-    { key: 'propuestas', label: 'Propuestas', icon: FileText, count: data.propuestas.length },
-    { key: 'participantes', label: 'Fundación', icon: Award, count: data.participantes.length },
-    { key: 'interesados', label: 'Interesados', icon: UserCheck, count: data.interesados.length },
-    { key: 'faq', label: 'FAQ', icon: HelpCircle, count: data.faq.length }
+    { key: 'conversaciones', label: 'Conversaciones', shortLabel: 'Conv', icon: MessageSquare, count: data.conversaciones.length },
+    { key: 'contactos', label: 'Contactos', shortLabel: 'Cont', icon: Users, count: data.contactos.length },
+    { key: 'propuestas', label: 'Propuestas', shortLabel: 'Prop', icon: FileText, count: data.propuestas.length },
+    { key: 'participantes', label: 'Fundación', shortLabel: 'Fund', icon: Award, count: data.participantes.length },
+    { key: 'interesados', label: 'Interesados', shortLabel: 'Int', icon: UserCheck, count: data.interesados.length },
+    { key: 'faq', label: 'FAQ', shortLabel: 'FAQ', icon: HelpCircle, count: data.faq.length }
   ];
 
   return (
@@ -713,26 +713,28 @@ const MobileDashboard = () => {
       </div>
 
       {/* Tabs */}
-      <div className="bg-white border-b overflow-x-auto sticky top-16 z-30">
-        <div className="flex">
-          {tabs.map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`flex-shrink-0 py-3 px-3 text-xs font-medium text-center border-b-2 ${
-                activeTab === tab.key
-                  ? 'border-blue-500 text-blue-600 bg-blue-50'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <tab.icon className="w-4 h-4 inline mr-1" />
-              <span className="hidden sm:inline">{tab.label}</span>
-              <span className="sm:hidden">{tab.label.slice(0,4)}</span>
-              <span className="ml-1 text-xs bg-gray-200 text-gray-600 px-1 rounded-full">
-                {tab.count}
-              </span>
-            </button>
-          ))}
+      <div className="bg-white border-b sticky top-16 z-30">
+        <div className="overflow-x-auto scrollbar-hide">
+          <div className="flex min-w-max px-2">
+            {tabs.map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex-shrink-0 py-3 px-3 text-xs font-medium text-center border-b-2 whitespace-nowrap min-w-0 ${
+                  activeTab === tab.key
+                    ? 'border-blue-500 text-blue-600 bg-blue-50'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <tab.icon className="w-4 h-4 inline mr-1" />
+                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="sm:hidden">{tab.shortLabel}</span>
+                <span className="ml-1 text-xs bg-gray-200 text-gray-600 px-1 rounded-full">
+                  {tab.count}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
