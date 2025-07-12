@@ -1,5 +1,7 @@
 // ⚠️ CAMBIAR ESTA URL POR LA TUYA DE POSTGREST
-const API_BASE_URL = 'https://postgrest-api-production-7372.up.railway.app';
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://postgrest-api-production-7372.up.railway.app'
+  : '';
 
 import React, { useState, useEffect } from 'react';
 
@@ -21,7 +23,6 @@ const TrendingUp = ({ className }) => <span className={className}>📈</span>;
 const Eye = ({ className }) => <span className={className}>👁️</span>;
 const UserCheck = ({ className }) => <span className={className}>✅</span>;
 const Edit = ({ className }) => <span className={className}>✏️</span>;
-const X = ({ className }) => <span className={className}>❌</span>;
 const Save = ({ className }) => <span className={className}>💾</span>;
 
 const MobileDashboard = () => {
@@ -33,30 +34,26 @@ const MobileDashboard = () => {
     participantes: [],
     faq: [],
     interesados: [],
+    gestion: [],
     estadisticas: {}
   });
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Estados para el modal de intervención
-  const [showModal, setShowModal] = useState(false);
-  const [selectedInteresado, setSelectedInteresado] = useState(null);
-  const [intervencionForm, setIntervencionForm] = useState({
-    respuesta_seguimiento: '',
-    nuevo_estado: 'confirmado'
-  });
-  const [savingIntervention, setSavingIntervention] = useState(false);
+  // Estados para la tabla editable de gestión
+  const [savingRows, setSavingRows] = useState({});
 
-  // Cargar todos los datos - FUNCIÓN ACTUALIZADA
+  // Cargar todos los datos
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [conversacionesRes, contactosRes, propuestasRes, participantesRes, faqRes, interesadosRes] = await Promise.all([
+      const [conversacionesRes, contactosRes, propuestasRes, participantesRes, faqRes, interesadosRes, gestionRes] = await Promise.all([
         fetch(`${API_BASE_URL}/conversaciones_vista?limit=50`),
         fetch(`${API_BASE_URL}/contactos_vista?limit=100`),
         fetch(`${API_BASE_URL}/propuestas_vista?limit=50`),
         fetch(`${API_BASE_URL}/participantes_vista?limit=50`),
         fetch(`${API_BASE_URL}/faq_vista?limit=20`),
+        fetch(`${API_BASE_URL}/participantes_vista?estado=eq.interesado&limit=100`),
         fetch(`${API_BASE_URL}/participantes_vista?estado=eq.interesado&limit=100`)
       ]);
       
@@ -66,6 +63,7 @@ const MobileDashboard = () => {
       let participantes = [];
       let faq = [];
       let interesados = [];
+      let gestion = [];
 
       // Procesar cada respuesta con protección contra errores
       if (conversacionesRes.ok) {
@@ -98,6 +96,23 @@ const MobileDashboard = () => {
         if (!Array.isArray(interesados)) interesados = [];
       }
 
+      if (gestionRes.ok) {
+        gestion = await gestionRes.json();
+        if (!Array.isArray(gestion)) gestion = [];
+        // Agregar campos editables a cada registro
+        gestion = gestion.map(item => ({
+          ...item,
+          temp_intervencion: '',
+          temp_estado: 'interesado',
+          // Campos temporales para datos del contacto (solo campos que existen en DB)
+          temp_nombre: item.nombre || '',
+          temp_apellido: item.apellido || '',
+          temp_email: item.email || '',
+          temp_telefono: item.telefono || '',
+          temp_domicilio: item.domicilio || ''
+        }));
+      }
+
       // Calcular estadísticas básicas
       const estadisticas = {
         total_contactos: contactos.length,
@@ -111,7 +126,7 @@ const MobileDashboard = () => {
         interesados_pendientes: interesados.length
       };
       
-      setData({ conversaciones, contactos, propuestas, participantes, faq, interesados, estadisticas });
+      setData({ conversaciones, contactos, propuestas, participantes, faq, interesados, gestion, estadisticas });
     } catch (error) {
       console.error('Error fetching data:', error);
       // En caso de error, mantener arrays vacíos
@@ -122,6 +137,7 @@ const MobileDashboard = () => {
         participantes: [],
         faq: [],
         interesados: [],
+        gestion: [],
         estadisticas: {}
       });
     } finally {
@@ -129,48 +145,111 @@ const MobileDashboard = () => {
     }
   };
 
-  // Función para guardar intervención
-  const saveIntervention = async () => {
-    if (!selectedInteresado || !intervencionForm.respuesta_seguimiento.trim()) {
+  // Función para guardar intervención Y datos del contacto desde tabla
+  const saveInterventionTable = async (item, intervencion, estado) => {
+    if (!intervencion.trim()) {
       alert('Por favor completa la intervención');
       return;
     }
+    
+    if (!item.temp_nombre.trim() && !item.temp_apellido.trim()) {
+      alert('Por favor completa al menos el nombre o apellido');
+      return;
+    }
 
-    setSavingIntervention(true);
+    setSavingRows(prev => ({ ...prev, [item.id]: true }));
     try {
-      const response = await fetch(`${API_BASE_URL}/participantes_fundacion?id=eq.${selectedInteresado.id}`, {
+      // UPDATE 1: Actualizar datos del contacto (solo campos que existen)
+      const contactUpdateResponse = await fetch(`${API_BASE_URL}/contactos?id=eq.${item.contacto_id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           'Prefer': 'return=minimal'
         },
         body: JSON.stringify({
-          respuesta_seguimiento: intervencionForm.respuesta_seguimiento,
-          estado: intervencionForm.nuevo_estado,
+          nombre: item.temp_nombre,
+          apellido: item.temp_apellido,
+          email: item.temp_email,
+          telefono: item.temp_telefono,
+          domicilio: item.temp_domicilio
+        })
+      });
+
+      // UPDATE 2: Actualizar intervención en participantes_fundacion
+      const interventionResponse = await fetch(`${API_BASE_URL}/participantes_fundacion?id=eq.${item.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({
+          respuesta_seguimiento: intervencion,
+          estado: estado,
           seguimiento_por_id: 1, // Temporal hasta implementar sistema de usuarios
           fecha_seguimiento: new Date().toISOString()
         })
       });
 
-      if (response.ok) {
-        alert('Intervención registrada exitosamente');
-        setShowModal(false);
-        setSelectedInteresado(null);
-        setIntervencionForm({
-          respuesta_seguimiento: '',
-          nuevo_estado: 'confirmado'
-        });
-        // Recargar datos para actualizar la lista
-        fetchData();
+      if (contactUpdateResponse.ok && interventionResponse.ok) {
+        alert('Datos del contacto e intervención guardados exitosamente');
+        // Mantener en lista pero actualizar datos guardados
+        setData(prevData => ({
+          ...prevData,
+          gestion: prevData.gestion.map(g => 
+            g.id === item.id 
+              ? { 
+                  ...g, 
+                  respuesta_seguimiento: intervencion,
+                  estado: estado,
+                  // Actualizar datos mostrados del contacto
+                  contacto_nombre: `${item.temp_nombre} ${item.temp_apellido}`.trim(),
+                  email: item.temp_email,
+                  telefono: item.temp_telefono,
+                  domicilio: item.temp_domicilio,
+                  // Limpiar campos temporales
+                  temp_intervencion: '', 
+                  temp_estado: 'interesado'
+                }
+              : g
+          )
+        }));
       } else {
-        throw new Error('Error al guardar la intervención');
+        throw new Error('Error al guardar los datos');
       }
     } catch (error) {
-      console.error('Error saving intervention:', error);
-      alert('Error al guardar la intervención. Intenta nuevamente.');
+      console.error('Error saving data:', error);
+      alert('Error al guardar los datos. Intenta nuevamente.');
     } finally {
-      setSavingIntervention(false);
+      setSavingRows(prev => ({ ...prev, [item.id]: false }));
     }
+  };
+
+  // Función para prevenir scroll - versión mejorada
+  const handleFieldFocus = (e) => {
+    // Guardar posición y bloquear scroll temporal
+    const scrollY = window.scrollY;
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+    
+    // Restaurar después de que se establezca el foco
+    setTimeout(() => {
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      window.scrollTo(0, scrollY);
+    }, 100);
+  };
+  // Función para actualizar campos temporales
+  const updateTempField = (id, field, value) => {
+    setData(prevData => ({
+      ...prevData,
+      gestion: prevData.gestion.map(item => 
+        item.id === id 
+          ? { ...item, [field]: value }
+          : item
+      )
+    }));
   };
 
   useEffect(() => {
@@ -228,7 +307,184 @@ const MobileDashboard = () => {
     </div>
   );
 
-  // NUEVO: Componente para interesados
+  // Componente de tabla editable para gestión
+  const GestionTable = () => (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Contacto
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Datos del Contacto
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Intervención
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Estado
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Acción
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {data.gestion.map((item) => (
+              <tr key={item.id} className="hover:bg-gray-50">
+                <td className="px-4 py-4">
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">
+                      {item.contacto_nombre || 'Sin nombre'}
+                    </div>
+                    {item.fecha_registro && (
+                      <div className="text-xs text-gray-500">
+                        <Calendar className="w-3 h-3 inline mr-1" />
+                        {formatDateOnly(item.fecha_registro)}
+                      </div>
+                    )}
+                  </div>
+                </td>
+                <td className="px-4 py-4">
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={item.temp_nombre}
+                      onChange={(e) => updateTempField(item.id, 'temp_nombre', e.target.value)}
+                      placeholder="Nombre"
+                      className="w-28 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                      maxLength="20"
+                    />
+                    <input
+                      type="text"
+                      value={item.temp_apellido}
+                      onChange={(e) => updateTempField(item.id, 'temp_apellido', e.target.value)}
+                      placeholder="Apellido"
+                      className="w-28 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                      maxLength="20"
+                    />
+                    <input
+                      type="email"
+                      value={item.temp_email}
+                      onChange={(e) => updateTempField(item.id, 'temp_email', e.target.value)}
+                      placeholder="Email"
+                      className="w-36 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                      maxLength="50"
+                    />
+                    <input
+                      type="tel"
+                      value={item.temp_telefono}
+                      onChange={(e) => updateTempField(item.id, 'temp_telefono', e.target.value)}
+                      placeholder="Teléfono"
+                      className="w-32 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                      maxLength="15"
+                    />
+                    <input
+                      type="text"
+                      value={item.temp_domicilio}
+                      onChange={(e) => updateTempField(item.id, 'temp_domicilio', e.target.value)}
+                      placeholder="Domicilio"
+                      className="w-40 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent"
+                      maxLength="60"
+                    />
+                  </div>
+                </td>
+                <td className="px-4 py-4">
+                  {/* Mostrar intervención ya guardada */}
+                  {item.respuesta_seguimiento && (
+                    <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-md">
+                      <div className="text-xs text-green-700 font-medium mb-1">
+                        ✅ Intervención guardada:
+                      </div>
+                      <div className="text-sm text-green-800">
+                        {item.respuesta_seguimiento}
+                      </div>
+                      <div className="text-xs text-green-600 mt-1">
+                        Estado: {item.estado}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Campo para nueva intervención */}
+                  <textarea
+                    value={item.temp_intervencion}
+                    onChange={(e) => updateTempField(item.id, 'temp_intervencion', e.target.value)}
+                    placeholder={item.respuesta_seguimiento ? "Nueva intervención..." : "Describir intervención realizada..."}
+                    className="w-56 px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                    rows="2"
+                    maxLength="300"
+                  />
+                  <div className="text-xs text-gray-500 mt-1">
+                    {item.temp_intervencion.length}/300
+                  </div>
+                </td>
+                <td className="px-4 py-4">
+                  {/* Mostrar estado actual si existe */}
+                  {item.estado && item.estado !== 'interesado' && (
+                    <div className="mb-2">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        item.estado === 'confirmado' ? 'bg-green-100 text-green-700' :
+                        item.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-700' :
+                        item.estado === 'rechazo' ? 'bg-red-100 text-red-700' :
+                        'bg-blue-100 text-blue-700'
+                      }`}>
+                        {item.estado.toUpperCase()}
+                      </span>
+                    </div>
+                  )}
+                  
+                  {/* Select para nuevo estado */}
+                  <select
+                    value={item.temp_estado}
+                    onChange={(e) => updateTempField(item.id, 'temp_estado', e.target.value)}
+                    className="text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="interesado">Interesado</option>
+                    <option value="confirmado">Confirmado</option>
+                    <option value="pendiente">Pendiente</option>
+                    <option value="rechazo">Rechazo</option>
+                  </select>
+                </td>
+                <td className="px-4 py-4">
+                  <button
+                    onClick={() => saveInterventionTable(item, item.temp_intervencion, item.temp_estado)}
+                    disabled={
+                      savingRows[item.id] || 
+                      !item.temp_intervencion.trim() ||
+                      (!item.temp_nombre.trim() && !item.temp_apellido.trim())
+                    }
+                    className="bg-green-600 text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                  >
+                    {savingRows[item.id] ? (
+                      <RefreshCw className="w-4 h-4 animate-spin mr-1" />
+                    ) : (
+                      <Save className="w-4 h-4 mr-1" />
+                    )}
+                    {savingRows[item.id] ? 'Guardando...' : 
+                     item.respuesta_seguimiento ? 'Nueva Int.' : 'Guardar'}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      
+      {data.gestion.length === 0 && (
+        <div className="text-center py-12">
+          <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+          <p className="text-gray-500 text-lg">No hay interesados para procesar</p>
+          <p className="text-gray-400 text-sm">
+            Los nuevos interesados aparecerán aquí cuando se registren
+          </p>
+        </div>
+      )}
+    </div>
+  );
+
+  // Componente para interesados (solo vista)
   const InteresadoCard = ({ item }) => (
     <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200 mb-3">
       <div className="flex justify-between items-start mb-3">
@@ -281,130 +537,13 @@ const MobileDashboard = () => {
         </div>
       )}
       
-      <button
-        onClick={() => {
-          setSelectedInteresado(item);
-          setShowModal(true);
-        }}
-        className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center justify-center"
-      >
-        <Edit className="w-4 h-4 mr-2" />
-        Registrar Intervención
-      </button>
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+        <p className="text-sm text-yellow-800">
+          💡 <span className="font-medium">Tip:</span> Usa la pestaña "Gestión" para procesar este interesado de forma más eficiente.
+        </p>
+      </div>
     </div>
   );
-
-  // Modal de intervención
-  const InterventionModal = () => {
-    if (!showModal || !selectedInteresado) return null;
-
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-          <div className="p-4 border-b border-gray-200">
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-gray-800">
-                Registrar Intervención
-              </h3>
-              <button
-                onClick={() => {
-                  setShowModal(false);
-                  setSelectedInteresado(null);
-                  setIntervencionForm({
-                    respuesta_seguimiento: '',
-                    nuevo_estado: 'confirmado'
-                  });
-                }}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-          </div>
-          
-          <div className="p-4">
-            <div className="mb-4">
-              <h4 className="font-medium text-gray-700 mb-2">
-                {selectedInteresado.contacto_nombre}
-              </h4>
-              <p className="text-sm text-gray-600">{selectedInteresado.email}</p>
-            </div>
-            
-            <div className="mb-4">
-              <label htmlFor="intervencion-textarea" className="block text-sm font-medium text-gray-700 mb-2">
-                Intervención realizada: *
-              </label>
-              <textarea
-                id="intervencion-textarea"
-                name="intervencion"
-                value={intervencionForm.respuesta_seguimiento}
-                onChange={(e) => setIntervencionForm({
-                  ...intervencionForm,
-                  respuesta_seguimiento: e.target.value
-                })}
-                placeholder="Describe la intervención realizada (máximo ~50 palabras)..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                rows="4"
-                maxLength="300"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                {intervencionForm.respuesta_seguimiento.length}/300 caracteres
-              </p>
-            </div>
-            
-            <div className="mb-6">
-              <label htmlFor="nuevo-estado-select" className="block text-sm font-medium text-gray-700 mb-2">
-                Nuevo estado: *
-              </label>
-              <select
-                id="nuevo-estado-select"
-                name="nuevoEstado"
-                value={intervencionForm.nuevo_estado}
-                onChange={(e) => setIntervencionForm({
-                  ...intervencionForm,
-                  nuevo_estado: e.target.value
-                })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              >
-                <option value="confirmado">Confirmado</option>
-                <option value="pendiente">Pendiente</option>
-                <option value="rechazo">Rechazo</option>
-              </select>
-            </div>
-            
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setShowModal(false);
-                  setSelectedInteresado(null);
-                  setIntervencionForm({
-                    respuesta_seguimiento: '',
-                    nuevo_estado: 'confirmado'
-                  });
-                }}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                disabled={savingIntervention}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={saveIntervention}
-                disabled={savingIntervention || !intervencionForm.respuesta_seguimiento.trim()}
-                className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-              >
-                {savingIntervention ? (
-                  <RefreshCw className="w-4 h-4 animate-spin mr-2" />
-                ) : (
-                  <Save className="w-4 h-4 mr-2" />
-                )}
-                {savingIntervention ? 'Guardando...' : 'Guardar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   const ConversacionCard = ({ item }) => (
     <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200 mb-3">
@@ -664,22 +803,24 @@ const MobileDashboard = () => {
     propuestas: filterData(data.propuestas, ['propuesta', 'contacto_nombre', 'categoria']),
     participantes: filterData(data.participantes, ['contacto_nombre', 'estado', 'email']),
     faq: filterData(data.faq, ['pregunta', 'respuesta', 'categoria_nombre', 'tags']),
-    interesados: filterData(data.interesados, ['contacto_nombre', 'email', 'telefono', 'origen'])
+    interesados: filterData(data.interesados, ['contacto_nombre', 'email', 'telefono', 'origen']),
+    gestion: filterData(data.gestion, ['contacto_nombre', 'email', 'telefono', 'temp_intervencion'])
   };
 
   const tabs = [
     { key: 'conversaciones', label: 'Conversaciones', shortLabel: 'Conv', icon: MessageSquare, count: data.conversaciones.length },
+    { key: 'interesados', label: 'Interesados', shortLabel: 'Int', icon: UserCheck, count: data.interesados.length },
+    { key: 'gestion', label: 'Gestión', shortLabel: 'Gest', icon: Edit, count: data.gestion.length },
     { key: 'contactos', label: 'Contactos', shortLabel: 'Cont', icon: Users, count: data.contactos.length },
     { key: 'propuestas', label: 'Propuestas', shortLabel: 'Prop', icon: FileText, count: data.propuestas.length },
     { key: 'participantes', label: 'Fundación', shortLabel: 'Fund', icon: Award, count: data.participantes.length },
-    { key: 'interesados', label: 'Interesados', shortLabel: 'Int', icon: UserCheck, count: data.interesados.length },
     { key: 'faq', label: 'FAQ', shortLabel: 'FAQ', icon: HelpCircle, count: data.faq.length }
   ];
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b px-4 py-3 sticky top-0 z-40">
+      <div className="bg-white shadow-sm border-b px-4 py-3">
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-semibold text-gray-800">📱 Dashboard Admin</h1>
           <button
@@ -719,7 +860,7 @@ const MobileDashboard = () => {
       </div>
 
       {/* Tabs */}
-      <div className="bg-white border-b sticky top-16 z-30">
+      <div className="bg-white border-b">
         <div className="overflow-x-auto scrollbar-hide">
           <div className="flex min-w-max px-2">
             {tabs.map(tab => (
@@ -768,11 +909,12 @@ const MobileDashboard = () => {
             {activeTab === 'interesados' && currentData.interesados.map(item => (
               <InteresadoCard key={item.id} item={item} />
             ))}
+            {activeTab === 'gestion' && <GestionTable />}
             {activeTab === 'faq' && currentData.faq.map(item => (
               <FaqCard key={item.id} item={item} />
             ))}
             
-            {currentData[activeTab]?.length === 0 && (
+            {(activeTab !== 'gestion' && currentData[activeTab]?.length === 0) && (
               <div className="text-center py-12">
                 <MessageSquare className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                 <p className="text-gray-500 text-lg">No hay datos disponibles</p>
@@ -784,9 +926,6 @@ const MobileDashboard = () => {
           </>
         )}
       </div>
-
-      {/* Modal de intervención */}
-      <InterventionModal />
     </div>
   );
 };
